@@ -24,6 +24,7 @@ namespace CardShop.Controllers
             return await _context.Cards.ToListAsync();
         }
 
+
         // GET: api/cards/5 (accessibile a tutti)
         [HttpGet("{id}")]
         public async Task<ActionResult<Card>> GetCard(int id)
