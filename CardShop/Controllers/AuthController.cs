@@ -42,30 +42,38 @@ namespace CardShop.Controllers
         [HttpPost("login")]
         public async Task<ActionResult> Login([FromBody] AuthRequest request)
         {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == request.Username);
+            var user = await _context.Users
+    .Where(u => EF.Functions.Like(u.Username, request.Username))
+    .OrderBy(u => u.Id)  // Assicurati che l'ordinamento avvenga in base all'ID
+    .FirstOrDefaultAsync();
+
+
+
+
             if (user == null)
             {
                 return Unauthorized(new { Message = "Invalid username or password!" });
             }
 
-            // Verifica la password hashata
             var result = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, request.Password);
 
-            if (result == PasswordVerificationResult.Failed)
+            if (result == PasswordVerificationResult.Success)
             {
-                return Unauthorized(new { Message = "Invalid username or password!" });
+                // Utente trovato e password valida, genera token
+                var token = GenerateJwtToken(user);
+                return Ok(new { Token = token, Role = user.Role });
             }
 
-            // Creazione del token JWT
-            var token = GenerateJwtToken(user);
-            return Ok(new { Token = token });
+            return Unauthorized(new { Message = "Invalid username or password!" });
         }
+
+
 
         private string GenerateJwtToken(User user)
         {
             var claims = new List<Claim>
             {
-                new Claim(ClaimTypes.Name, user.Username),
+                new Claim(ClaimTypes.Name, user.Username.ToLower()),
                 new Claim(ClaimTypes.Role, user.Role)
             };
 
