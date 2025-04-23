@@ -1,12 +1,10 @@
-﻿using CardShop.Data;
+﻿using CardShop.Services;
 using CardShop.Models;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Identity;  // Importa il namespace per il PasswordHasher
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.IdentityModel.Tokens;
 
 namespace CardShop.Controllers
 {
@@ -14,27 +12,20 @@ namespace CardShop.Controllers
     [ApiController]
     public class AuthController : ControllerBase
     {
-        private readonly AppDbContext _context;
+        private readonly UserService _userService;
         private readonly IConfiguration _configuration;
-        private readonly PasswordHasher<User> _passwordHasher;
 
-        public AuthController(AppDbContext context, IConfiguration configuration)
+        public AuthController(UserService userService, IConfiguration configuration)
         {
-            _context = context;
+            _userService = userService;
             _configuration = configuration;
-            _passwordHasher = new PasswordHasher<User>();  // Inizializza il PasswordHasher
         }
 
         // POST: api/auth/register
         [HttpPost("register")]
         public async Task<ActionResult> Register([FromBody] User user)
         {
-            // Hash della password prima di salvarla
-            user.PasswordHash = _passwordHasher.HashPassword(user, user.PasswordHash);
-
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
-
+            var createdUser = await _userService.RegisterAsync(user);
             return Ok(new { Message = "User registered successfully!" });
         }
 
@@ -42,32 +33,15 @@ namespace CardShop.Controllers
         [HttpPost("login")]
         public async Task<ActionResult> Login([FromBody] AuthRequest request)
         {
-            var user = await _context.Users
-    .Where(u => EF.Functions.Like(u.Username, request.Username))
-    .OrderBy(u => u.Id)  // Assicurati che l'ordinamento avvenga in base all'ID
-    .FirstOrDefaultAsync();
-
-
-
-
+            var user = await _userService.LoginAsync(request.Username, request.Password);
             if (user == null)
             {
                 return Unauthorized(new { Message = "Invalid username or password!" });
             }
 
-            var result = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, request.Password);
-
-            if (result == PasswordVerificationResult.Success)
-            {
-                // Utente trovato e password valida, genera token
-                var token = GenerateJwtToken(user);
-                return Ok(new { Token = token, Role = user.Role });
-            }
-
-            return Unauthorized(new { Message = "Invalid username or password!" });
+            var token = GenerateJwtToken(user);
+            return Ok(new { Token = token, Role = user.Role });
         }
-
-
 
         private string GenerateJwtToken(User user)
         {
@@ -92,4 +66,5 @@ namespace CardShop.Controllers
         }
     }
 }
+
 

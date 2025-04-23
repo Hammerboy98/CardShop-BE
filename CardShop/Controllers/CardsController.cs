@@ -1,128 +1,91 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using CardShop.Models; // Namespace dove si trova la tua classe Card
-using CardShop.Data;
+﻿using CardShop.Services;
+using CardShop.Models;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
-using System.Linq;
 
 namespace CardShop.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class CardsController : ControllerBase
+    public class CardController : ControllerBase
     {
-        private readonly AppDbContext _context;
+        private readonly CardService _cardService;
 
-        public CardsController(AppDbContext context)
+        public CardController(CardService cardService)
         {
-            _context = context;
+            _cardService = cardService;
         }
 
-        // GET: api/cards (accessibile a tutti)
+        // POST: api/card
+        [Authorize(Roles = "admin")]
+        [HttpPost]
+        public async Task<ActionResult<Card>> AddCard([FromBody] Card card)
+        {
+            var createdCard = await _cardService.AddCardAsync(card);
+            return CreatedAtAction(nameof(GetCardById), new { id = createdCard.Id }, createdCard);
+        }
+
+        // GET: api/card
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Card>>> GetCards()
+        public async Task<ActionResult<IEnumerable<Card>>> GetAllCards()
         {
-            return await _context.Cards.ToListAsync();
+            var cards = await _cardService.GetAllCardsAsync();
+            return Ok(cards);
         }
 
-        // GET: api/cards/category/pokemon (accessibile a tutti - carte per categoria)
-        [HttpGet("category/{category}")]
-        public async Task<ActionResult<IEnumerable<Card>>> GetCardsByCategory(string category)
-        {
-            return await _context.Cards
-                .Where(c => c.Category.ToLower() == category.ToLower())
-                .ToListAsync();
-        }
-
-        // GET: api/cards/5 (accessibile a tutti)
+        // GET: api/card/5
         [HttpGet("{id}")]
-        public async Task<ActionResult<Card>> GetCard(int id)
+        public async Task<ActionResult<Card>> GetCardById(int id)
         {
-            var card = await _context.Cards.FindAsync(id);
-
+            var card = await _cardService.GetCardByIdAsync(id);
             if (card == null)
             {
                 return NotFound();
             }
-
-            return card;
+            return Ok(card);
         }
 
-        // POST: api/cards (solo per admin, incluse le persone con username 'Ettore')
-        [Authorize]
-        [HttpPost]
-        public async Task<ActionResult<Card>> PostCard(Card card)
+        // GET: api/card/category/{category}
+        [HttpGet("category/{category}")]
+        public async Task<ActionResult<IEnumerable<Card>>> GetCardsByCategory(string category)
         {
-            // Controlla se l'utente è Ettore o ha il ruolo admin
-            if (User.Identity.Name != "Ettore" && !User.IsInRole("admin"))
+            var cards = await _cardService.GetCardsByCategoryAsync(category);
+            if (cards == null || !cards.Any())
             {
-                return Unauthorized("Non hai i permessi per aggiungere una carta.");
+                return NotFound("Nessuna carta trovata per questa categoria.");
             }
-
-            _context.Cards.Add(card);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction(nameof(GetCard), new { id = card.Id }, card);
+            return Ok(cards);
         }
 
-        // PUT: api/cards/5 (solo per admin, incluse le persone con username 'Ettore')
-        [Authorize]
+        // PUT: api/card/5
+        [Authorize(Roles = "admin")]
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutCard(int id, Card card)
+        public async Task<ActionResult<Card>> UpdateCard(int id, [FromBody] Card card)
         {
-            // Controlla se l'utente è Ettore o ha il ruolo admin
-            if (User.Identity.Name != "Ettore" && !User.IsInRole("admin"))
-            {
-                return Unauthorized("Non hai i permessi per modificare una carta.");
-            }
-
             if (id != card.Id)
             {
                 return BadRequest();
             }
 
-            _context.Entry(card).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!_context.Cards.Any(e => e.Id == id))
-                {
-                    return NotFound();
-                }
-
-                throw;
-            }
-
-            return NoContent();
+            var updatedCard = await _cardService.UpdateCardAsync(card);
+            return Ok(updatedCard);
         }
 
-        // DELETE: api/cards/5 (solo per admin, incluse le persone con username 'Ettore')
-        [Authorize]
+        // DELETE: api/card/5
+        [Authorize(Roles = "admin")]
         [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteCard(int id)
+        public async Task<ActionResult> DeleteCard(int id)
         {
-            // Controlla se l'utente è Ettore o ha il ruolo admin
-            if (User.Identity.Name != "Ettore" && !User.IsInRole("admin"))
-            {
-                return Unauthorized("Non hai i permessi per eliminare una carta.");
-            }
-
-            var card = await _context.Cards.FindAsync(id);
-            if (card == null)
+            var result = await _cardService.DeleteCardAsync(id);
+            if (!result)
             {
                 return NotFound();
             }
-
-            _context.Cards.Remove(card);
-            await _context.SaveChangesAsync();
-
             return NoContent();
         }
     }
 }
+
+
 
 
